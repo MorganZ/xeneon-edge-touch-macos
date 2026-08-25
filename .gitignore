@@ -9,3 +9,6 @@
 .vscode/
 .idea/
 *.swp
+/dist/
+/touchd-arm64
+/touchd-x86_64
