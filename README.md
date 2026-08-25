@@ -40,6 +40,17 @@ live from CoreGraphics on every event, nothing to configure.
 
 ## Install
 
+**From a release** (no Xcode needed — universal binary, Apple Silicon + Intel):
+
+```sh
+curl -LO https://github.com/MorganZ/xeneon-edge-touch-macos/releases/latest/download/xeneon-edge-touch-macos-v0.1.0.tar.gz
+tar xzf xeneon-edge-touch-macos-v0.1.0.tar.gz
+cd xeneon-edge-touch-macos-v0.1.0
+./install.sh
+```
+
+**From source** (needs `xcode-select --install`):
+
 ```sh
 git clone https://github.com/MorganZ/xeneon-edge-touch-macos.git
 cd xeneon-edge-touch-macos
