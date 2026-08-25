@@ -2,11 +2,11 @@
 
 <p align="center">
   <b>Make the Corsair XENEON EDGE touchscreen actually work on macOS.</b><br>
-  One Swift file. No kernel extension. No iCUE. No GUI.
+  A tiny menu-bar app. No kernel extension. No iCUE.
 </p>
 
 <p align="center">
-  <img alt="macOS 12+" src="https://img.shields.io/badge/macOS-12%2B-black?logo=apple">
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-black?logo=apple">
   <img alt="Apple Silicon & Intel" src="https://img.shields.io/badge/Apple%20Silicon-%E2%9C%93-blue">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white">
   <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-green">
@@ -38,56 +38,50 @@ onto your **main** display. Touch the Edge, and the pointer jumps around on your
 Works with any display arrangement (left, right, above, below, scaled resolutions) — geometry is read
 live from CoreGraphics on every event, nothing to configure.
 
-## Install
+## Install — the app (recommended)
 
-**From a release** (no Xcode needed — universal binary, Apple Silicon + Intel):
+1. Download **`Xeneon Touch-vX.Y.Z.dmg`** from the
+   [latest release](https://github.com/MorganZ/xeneon-edge-touch-macos/releases/latest).
+2. Drag **Xeneon Touch** to **Applications** and open it.
+   (Unsigned build: on first open, right-click → *Open*, or allow it in Privacy & Security.)
+3. Grant the two permissions it asks for:
+
+   | Permission | Why |
+   |---|---|
+   | **Input Monitoring** | to take exclusive control of the touch HID device |
+   | **Accessibility** | to post mouse events |
+
+That's it. It lives in the menu bar (🖐), starts at login, and the status line tells you when the
+Edge is connected. **To uninstall, drag the app to the Trash** — there is nothing else on disk.
+
+Menu options: *Restore cursor after touch*, *Start at login*, *Open Privacy & Security…*, *Quit*.
+
+## Install — command line (`touchd`)
+
+Prefer a headless LaunchAgent? The same driver ships as a CLI:
 
 ```sh
-curl -LO https://github.com/MorganZ/xeneon-edge-touch-macos/releases/latest/download/xeneon-edge-touch-macos-v0.1.0.tar.gz
-tar xzf xeneon-edge-touch-macos-v0.1.0.tar.gz
-cd xeneon-edge-touch-macos-v0.1.0
-./install.sh
+curl -LO https://github.com/MorganZ/xeneon-edge-touch-macos/releases/latest/download/xeneon-edge-touch-macos-v0.2.0.tar.gz
+tar xzf xeneon-edge-touch-macos-v0.2.0.tar.gz && cd xeneon-edge-touch-macos-v0.2.0
+./install.sh          # -> /usr/local/bin/touchd + ~/Library/LaunchAgents/com.morgan.touchd.plist
+./uninstall.sh        # removes both
 ```
 
-**From source** (needs `xcode-select --install`):
+Grant `/usr/local/bin/touchd` the same two permissions (⌘⇧G in the file picker to type the path), then
+`launchctl kickstart -k gui/$(id -u)/com.morgan.touchd`. Log: `/tmp/touchd.log`.
+
+## Build from source
 
 ```sh
 git clone https://github.com/MorganZ/xeneon-edge-touch-macos.git
 cd xeneon-edge-touch-macos
-./install.sh
+make app      # -> dist/Xeneon Touch.app
+make dmg      # -> dist/Xeneon Touch-<version>.dmg
+make touchd   # -> ./touchd   (./touchd -v for a verbose trace, --no-restore to leave the cursor)
 ```
 
-Then grant `/usr/local/bin/touchd` two permissions in **System Settings → Privacy & Security**
-(use `⌘⇧G` in the file picker to type the path):
-
-| Permission | Why |
-|---|---|
-| **Input Monitoring** | to take exclusive control of the touch HID device |
-| **Accessibility** | to post mouse events |
-
-Restart it once the permissions are granted:
-
-```sh
-launchctl kickstart -k gui/$(id -u)/com.morgan.touchd
-```
-
-It starts automatically at login from then on. Log: `/tmp/touchd.log`.
-
-### Uninstall
-
-```sh
-./uninstall.sh
-```
-
-## Try it without installing
-
-```sh
-swiftc -O -o touchd touchd.swift
-./touchd -v            # verbose: prints every touch
-./touchd --no-restore  # leave the cursor on the Edge after a touch
-```
-
-(Running from a terminal? Grant the two permissions to your terminal app instead.)
+Needs only the Xcode Command Line Tools (`xcode-select --install`). Running the CLI from a terminal?
+Grant the two permissions to your terminal app instead.
 
 ## Tips
 
@@ -107,7 +101,9 @@ report 7 : [07] [buttons] [X u16 0‥16383] [Y u16 0‥9599] [wheel]
 
 `touchd` opens the device with `kIOHIDOptionsTypeSeizeDevice`, reads those raw reports, normalises X/Y,
 finds the Xeneon display by its EDID vendor ID (`0x0E58`, Corsair), and posts `CGEvent`s inside
-`CGDisplayBounds` of that display. That is the entire driver — ~150 lines.
+`CGDisplayBounds` of that display. That is the entire driver — `Driver.swift`, ~170 lines.
+The app (`App/XeneonTouchApp.swift`) is a ~100-line AppKit status item around it that registers itself
+as a login item with `SMAppService`, so deleting the app removes everything.
 
 ## Limitations
 
@@ -115,7 +111,8 @@ finds the Xeneon display by its EDID vendor ID (`0x0E58`, Corsair), and posts `C
   interface) switches the firmware into multitouch mode; that protocol is undocumented. So no two-finger
   scroll or pinch — yet. If you know the vendor command, open an issue!
 - No iCUE widgets, dashboards or sensors: this is a display + touch driver, nothing more.
-- Only tested on Apple Silicon (Mac Studio M1 Max, macOS 26). Should work on Intel too.
+- Builds are ad-hoc signed, not notarized (no Apple Developer ID). Gatekeeper will ask once.
+- Only tested on Apple Silicon (Mac Studio M1 Max, macOS 26). Universal binary, so Intel should work too.
 
 ## Related projects
 

@@ -25,10 +25,12 @@ let rawMaxY: Double = 9599
 
 // MARK: - Options
 
-setbuf(stdout, nil)
-let restoreCursor = !CommandLine.arguments.contains("--no-restore")
-let verbose = CommandLine.arguments.contains("-v")
+var restoreCursor = true
+var verbose = false
 func log(_ s: String) { if verbose { print(s) } }
+
+/// Called on the main thread when the Edge attaches/detaches.
+var onAttachChange: ((Bool) -> Void)?
 
 // MARK: - Target display
 
@@ -170,23 +172,34 @@ let deviceMatched: IOHIDDeviceCallback = { _, _, _, device in
         IOHIDDeviceRegisterInputReportCallback(device, buf.baseAddress!, buf.count, reportCallback, nil)
     }
     print("Xeneon Edge digitizer attached")
+    onAttachChange?(true)
 }
 
 let deviceRemoved: IOHIDDeviceCallback = { _, _, _, _ in
     if mode != .idle { finish() }
     print("Xeneon Edge digitizer detached")
+    onAttachChange?(false)
 }
 
-let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-IOHIDManagerSetDeviceMatching(manager, [kIOHIDVendorIDKey: vendorID, kIOHIDProductIDKey: productID] as CFDictionary)
-IOHIDManagerRegisterDeviceMatchingCallback(manager, deviceMatched, nil)
-IOHIDManagerRegisterDeviceRemovalCallback(manager, deviceRemoved, nil)
-IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+var manager: IOHIDManager?
 
-let rc = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
-guard rc == kIOReturnSuccess else {
-    print("IOHIDManagerOpen failed (0x\(String(rc, radix: 16))). Grant Input Monitoring to this binary/terminal.")
-    exit(1)
+/// Opens the Edge exclusively. Returns kIOReturnNotPermitted when Input Monitoring is missing.
+@discardableResult
+func startDriver() -> IOReturn {
+    let m = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+    IOHIDManagerSetDeviceMatching(m, [kIOHIDVendorIDKey: vendorID, kIOHIDProductIDKey: productID] as CFDictionary)
+    IOHIDManagerRegisterDeviceMatchingCallback(m, deviceMatched, nil)
+    IOHIDManagerRegisterDeviceRemovalCallback(m, deviceRemoved, nil)
+    IOHIDManagerScheduleWithRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+    let rc = IOHIDManagerOpen(m, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
+    if rc == kIOReturnSuccess { manager = m } else { IOHIDManagerUnscheduleFromRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue) }
+    return rc
 }
-print("touchd running (restore cursor: \(restoreCursor)). Ctrl-C to quit.")
-CFRunLoopRun()
+
+func stopDriver() {
+    guard let m = manager else { return }
+    if mode != .idle { finish() }
+    IOHIDManagerUnscheduleFromRunLoop(m, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+    IOHIDManagerClose(m, IOOptionBits(kIOHIDOptionsTypeNone))
+    manager = nil
+}
