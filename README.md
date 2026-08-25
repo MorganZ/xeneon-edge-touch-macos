@@ -44,7 +44,9 @@ live from CoreGraphics on every event, nothing to configure.
 1. Download **`Xeneon Touch-vX.Y.Z.dmg`** from the
    [latest release](https://github.com/MorganZ/xeneon-edge-touch-macos/releases/latest).
 2. Drag **Xeneon Touch** to **Applications** and open it.
-   (Unsigned build: on first open, right-click → *Open*, or allow it in Privacy & Security.)
+   macOS will say *"Xeneon Touch" Not Opened* because the build isn't notarized. Click **Done**
+   (not *Move to Trash*), then **System Settings → Privacy & Security → Open Anyway**.
+   Or from a terminal: `xattr -dr com.apple.quarantine "/Applications/Xeneon Touch.app"`.
 3. Grant the two permissions it asks for:
 
    | Permission | Why |
@@ -99,7 +101,8 @@ as a login item with `SMAppService`, so deleting the app removes everything.
   interface) switches the firmware into multitouch mode; that protocol is undocumented. So no two-finger
   scroll or pinch — yet. If you know the vendor command, open an issue!
 - No iCUE widgets, dashboards or sensors: this is a display + touch driver, nothing more.
-- Builds are ad-hoc signed, not notarized (no Apple Developer ID). Gatekeeper will ask once.
+- Builds are ad-hoc signed, not notarized (notarization needs a paid Apple Developer ID). Gatekeeper
+  blocks the first launch once; see Install step 2.
 - Only tested on Apple Silicon (Mac Studio M1 Max, macOS 26). Universal binary, so Intel should work too.
 
 ## Related projects
