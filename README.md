@@ -1,4 +1,5 @@
-<h1 align="center">xeneon-edge-touch-macos</h1>
+<p align="center"><img src="App/AppIcon-preview.png" width="128" alt="Xeneon Touch icon"></p>
+<h1 align="center">Xeneon Touch</h1>
 
 <p align="center">
   <b>Make the Corsair XENEON EDGE touchscreen actually work on macOS.</b><br>
