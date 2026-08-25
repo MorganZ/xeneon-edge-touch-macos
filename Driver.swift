@@ -18,8 +18,6 @@ import CoreGraphics
 let vendorID = 0x27c0
 let productID = 0x0859
 let corsairDisplayVendor: UInt32 = 0x0E58
-let reportID: UInt8 = 0x0D
-let maxContacts = 10
 let rawMaxX: Double = 16383
 let rawMaxY: Double = 9599
 
@@ -77,8 +75,8 @@ var mode = Mode.idle
 var savedCursor = CGPoint.zero
 var lastPoint = CGPoint.zero
 
-func handle(contacts: [CGPoint]) {
-    switch (mode, contacts.first) {
+func handle(_ p: CGPoint?) {
+    switch (mode, p) {
     case (.idle, nil):
         break
     case (.idle, let p?):
@@ -101,83 +99,46 @@ func finish() {
     if restoreCursor { CGWarpMouseCursorPosition(savedCursor) }
 }
 
-// MARK: - Report parsing
-// Report 0x0D: [id][10 × {tip:1 pad:3 cid:4, x:u16, y:u16}][scanTime:u16][count:u8]
+// MARK: - HID input
+//
+// The Edge exposes a multitouch digitizer interface, but its firmware never reports
+// on it (multitouch is presumably enabled by iCUE through the vendor interface).
+// All touch data arrives on the *mouse* interface as report 7:
+//   [07][buttons][X u16 0…16383][Y u16 0…9599][wheel]
+// bit 0 of `buttons` is the finger-down state.
 
-func parse(_ r: UnsafeBufferPointer<UInt8>) {
-    log("digitizer report id=\(r.count > 0 ? r[0] : 0) len=\(r.count)")
-    guard r.count >= 54, r[0] == reportID else { return }
-    let count = min(Int(r[53]), maxContacts)
-    var pts: [CGPoint] = []
-    for i in 0..<count {
-        let o = 1 + i * 5
-        guard r[o] & 1 == 1 else { continue }
-        let x = Double(UInt16(r[o + 1]) | UInt16(r[o + 2]) << 8)
-        let y = Double(UInt16(r[o + 3]) | UInt16(r[o + 4]) << 8)
-        pts.append(toScreen(x, y))
-    }
-    log("contacts=\(count) tips=\(pts.count) mode=\(mode) \(pts.first.map { "(\(Int($0.x)),\(Int($0.y)))" } ?? "")")
-    handle(contacts: pts)
-}
+var reportBuffer = [UInt8](repeating: 0, count: 16)
 
-// MARK: - HID setup
-
-var reportBuffer = [UInt8](repeating: 0, count: 64)
-var mouseBuffer = [UInt8](repeating: 0, count: 16)
-// Mouse interface, report 7: [07][buttons][X u16][Y u16][wheel]. The Edge sends
-// single-touch here even after the Device Mode switch, so this is the main input path.
-let mouseTrace: IOHIDReportCallback = { _, _, _, _, _, report, length in
+let reportCallback: IOHIDReportCallback = { _, _, _, _, _, report, length in
     guard length >= 6, report[0] == 0x07 else { return }
-    var pts: [CGPoint] = []
+    var p: CGPoint? = nil
     if report[1] & 1 == 1 {
         let x = Double(UInt16(report[2]) | UInt16(report[3]) << 8)
         let y = Double(UInt16(report[4]) | UInt16(report[5]) << 8)
-        pts.append(toScreen(x, y))
+        p = toScreen(x, y)
     }
-    log("mouse: tip=\(pts.count) mode=\(mode) \(pts.first.map { "(\(Int($0.x)),\(Int($0.y)))" } ?? "")")
-    handle(contacts: pts)
+    log("touch: \(p.map { "(\(Int($0.x)),\(Int($0.y)))" } ?? "up") mode=\(mode)")
+    handle(p)
 }
 
-let reportCallback: IOHIDReportCallback = { _, _, _, _, _, report, length in
-    parse(UnsafeBufferPointer(start: report, count: length))
-}
-
+// The manager seizes every interface of the device (mouse, digitizer, vendor), which is
+// what stops macOS from using it; we only need to read the mouse one.
 let deviceMatched: IOHIDDeviceCallback = { _, _, _, device in
     let page = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsagePageKey as CFString) as? Int ?? 0
     let usage = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsageKey as CFString) as? Int ?? 0
-    log("device matched: page=\(page) usage=\(usage)")
-    if page == kHIDPage_GenericDesktop {   // mouse interface (seized, so macOS no longer sees it)
-        mouseBuffer.withUnsafeMutableBufferPointer { buf in
-            IOHIDDeviceRegisterInputReportCallback(device, buf.baseAddress!, buf.count, mouseTrace, nil)
-        }
-        return
-    }
-    guard page == kHIDPage_Digitizer, usage == kHIDUsage_Dig_TouchScreen else { return }
-    // Switch the controller from mouse emulation to multi-touch reporting (Device Mode = 2).
-    var feat = [UInt8](repeating: 0, count: 8)
-    var n: CFIndex = feat.count
-    feat[0] = 0x0A
-    var r = IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, 0x0A, &feat, &n)
-    log("get max contacts (0x0A) -> 0x\(String(UInt32(bitPattern: r), radix: 16)) \(Array(feat.prefix(n)))")
-    n = feat.count; feat = [UInt8](repeating: 0, count: 8); feat[0] = 0x21
-    r = IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, 0x21, &feat, &n)
-    log("get device mode (0x21) -> 0x\(String(UInt32(bitPattern: r), radix: 16)) \(Array(feat.prefix(n)))")
-    var modeReport: [UInt8] = [0x21, 0x02, 0x00]
-    r = IOHIDDeviceSetReport(device, kIOHIDReportTypeFeature, 0x21, &modeReport, modeReport.count)
-    log("set device mode -> 0x\(String(UInt32(bitPattern: r), radix: 16))")
-    n = feat.count; feat = [UInt8](repeating: 0, count: 8); feat[0] = 0x21
-    r = IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, 0x21, &feat, &n)
-    log("device mode after set -> \(Array(feat.prefix(n)))")
+    guard page == kHIDPage_GenericDesktop, usage == kHIDUsage_GD_Mouse else { return }
     reportBuffer.withUnsafeMutableBufferPointer { buf in
         IOHIDDeviceRegisterInputReportCallback(device, buf.baseAddress!, buf.count, reportCallback, nil)
     }
-    print("Xeneon Edge digitizer attached")
+    print("Xeneon Edge attached")
     onAttachChange?(true)
 }
 
-let deviceRemoved: IOHIDDeviceCallback = { _, _, _, _ in
+let deviceRemoved: IOHIDDeviceCallback = { _, _, _, device in
+    let page = IOHIDDeviceGetProperty(device, kIOHIDPrimaryUsagePageKey as CFString) as? Int ?? 0
+    guard page == kHIDPage_GenericDesktop else { return }
     if mode != .idle { finish() }
-    print("Xeneon Edge digitizer detached")
+    print("Xeneon Edge detached")
     onAttachChange?(false)
 }
 
