@@ -1,0 +1,11 @@
+# build output
+/touchd
+*.o
+*.dSYM/
+.build/
+
+# editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
