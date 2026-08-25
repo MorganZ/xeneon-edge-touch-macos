@@ -22,7 +22,7 @@ onto your **main** display. Touch the Edge, and the pointer jumps around on your
 
 ## The fix
 
-`touchd` is a tiny user-space driver that:
+**Xeneon Touch** is a menu-bar app wrapping a tiny user-space driver that:
 
 - **seizes** the Edge's HID device, so macOS stops treating it as a mouse
 - maps every touch onto the **Xeneon display itself**, wherever it sits in your arrangement
@@ -56,20 +56,6 @@ Edge is connected. **To uninstall, drag the app to the Trash** — there is noth
 
 Menu options: *Restore cursor after touch*, *Start at login*, *Open Privacy & Security…*, *Quit*.
 
-## Install — command line (`touchd`)
-
-Prefer a headless LaunchAgent? The same driver ships as a CLI:
-
-```sh
-curl -LO https://github.com/MorganZ/xeneon-edge-touch-macos/releases/latest/download/xeneon-edge-touch-macos-v0.2.0.tar.gz
-tar xzf xeneon-edge-touch-macos-v0.2.0.tar.gz && cd xeneon-edge-touch-macos-v0.2.0
-./install.sh          # -> /usr/local/bin/touchd + ~/Library/LaunchAgents/com.morgan.touchd.plist
-./uninstall.sh        # removes both
-```
-
-Grant `/usr/local/bin/touchd` the same two permissions (⌘⇧G in the file picker to type the path), then
-`launchctl kickstart -k gui/$(id -u)/com.morgan.touchd`. Log: `/tmp/touchd.log`.
-
 ## Build from source
 
 ```sh
@@ -77,11 +63,12 @@ git clone https://github.com/MorganZ/xeneon-edge-touch-macos.git
 cd xeneon-edge-touch-macos
 make app      # -> dist/Xeneon Touch.app
 make dmg      # -> dist/Xeneon Touch-<version>.dmg
-make touchd   # -> ./touchd   (./touchd -v for a verbose trace, --no-restore to leave the cursor)
 ```
 
-Needs only the Xcode Command Line Tools (`xcode-select --install`). Running the CLI from a terminal?
-Grant the two permissions to your terminal app instead.
+Needs only the Xcode Command Line Tools (`xcode-select --install`).
+
+Debugging? `make touchd && ./touchd -v` runs the bare driver in a terminal and prints every touch
+(grant the two permissions to your terminal app for that).
 
 ## Tips
 
@@ -99,7 +86,7 @@ Out of the box the firmware only ever reports through the **mouse** interface, a
 report 7 : [07] [buttons] [X u16 0‥16383] [Y u16 0‥9599] [wheel]
 ```
 
-`touchd` opens the device with `kIOHIDOptionsTypeSeizeDevice`, reads those raw reports, normalises X/Y,
+The driver opens the device with `kIOHIDOptionsTypeSeizeDevice`, reads those raw reports, normalises X/Y,
 finds the Xeneon display by its EDID vendor ID (`0x0E58`, Corsair), and posts `CGEvent`s inside
 `CGDisplayBounds` of that display. That is the entire driver — `Driver.swift`, ~170 lines.
 The app (`App/XeneonTouchApp.swift`) is a ~100-line AppKit status item around it that registers itself

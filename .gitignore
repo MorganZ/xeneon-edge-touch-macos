@@ -10,5 +10,5 @@
 .idea/
 *.swp
 /dist/
-/touchd-arm64
-/touchd-x86_64
+/app-arm64
+/app-x86_64
